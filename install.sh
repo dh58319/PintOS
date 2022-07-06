@@ -6,7 +6,7 @@ set -ex
 sudo apt-get -y update
 
 # gcc
-sudo apt-get install -y software-properties-common python-software-properties
+sudo apt-get install -y software-properties-common #python-software-properties
 sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
 sudo apt update && sudo apt install g++-7 -y
 
