@@ -44,10 +44,10 @@ static struct lock tid_lock;
 static struct list destruction_req;
 
 /* Statistics. */
-static long long idle_ticks;   /* # of timer ticks spent idle. */
-static long long kernel_ticks; /* # of timer ticks in kernel threads. */
-static long long user_ticks;   /* # of timer ticks in user programs. */
-static long long tick_to_wake; //-------------------------------------------------
+static long long idle_ticks;				   /* # of timer ticks spent idle. */
+static long long kernel_ticks;				   /* # of timer ticks in kernel threads. */
+static long long user_ticks;				   /* # of timer ticks in user programs. */
+static int64_t next_tick_to_awake = INT64_MAX; //-------------------------------------------------
 
 /* Scheduling. */
 #define TIME_SLICE 4		  /* # of timer ticks to give each thread. */
@@ -66,6 +66,17 @@ static void init_thread(struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule(void);
 static tid_t allocate_tid(void);
+static void update_tick_awake(int64_t tick)
+{
+	if (next_tick_to_awake > tick)
+	{
+		next_tick_to_awake = tick;
+	}
+}
+int64_t get_next_tick(void)
+{
+	return next_tick_to_awake;
+}
 
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -619,11 +630,13 @@ void thread_sleep(int64_t ticks)
 	struct thread *curr;
 	enum intr_level old_level;
 
-	curr = thread_current(); // set curr to current thread
-	old_level = intr_disable();
-
+	curr = thread_current();	 // set curr to current thread
 	ASSERT(curr != idle_thread); // we should not to make idle thread to sleep
+	old_level = intr_disable();
+	curr->wakeup_ticks = ticks;
+	update_next_tick_to_awake(curr->wakeup_ticks);
+	thread_block();
+	intr_set_level(old_level);
+	list_push_back(&sleep_list, &curr->elem);
 }
 void thread_awake(int64_t ticks); // awake thread from sleep_list
-void search_for_minimum_ticks(int64_t);
-int64_t get_next_tick(void);
