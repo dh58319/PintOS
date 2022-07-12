@@ -66,18 +66,8 @@ static void init_thread(struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule(void);
 static tid_t allocate_tid(void);
-static void update_tick_awake(int64_t tick)
-{
-	if (next_tick_to_awake > tick)
-	{
-		next_tick_to_awake = tick;
-	}
-}
-int64_t get_next_tick(void)
-{
-	return next_tick_to_awake;
-}
-
+static void update_tick_awake(int64_t tick);
+int64_t get_next_tick(void);
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -625,6 +615,18 @@ allocate_tid(void)
 
 /* Code I implemented */
 
+static void update_tick_to_awake(int64_t tick)
+{
+	if (next_tick_to_awake > tick)
+	{
+		next_tick_to_awake = tick;
+	}
+}
+int64_t get_next_tick(void)
+{
+	return next_tick_to_awake;
+}
+
 void thread_sleep(int64_t ticks)
 {
 	struct thread *curr;
@@ -633,10 +635,13 @@ void thread_sleep(int64_t ticks)
 	curr = thread_current();	 // set curr to current thread
 	ASSERT(curr != idle_thread); // we should not to make idle thread to sleep
 	old_level = intr_disable();
-	curr->wakeup_ticks = ticks;
-	update_next_tick_to_awake(curr->wakeup_ticks);
+	curr->wakeup_ticks = ticks;				  // set thread ticks to current tick
+	update_tick_to_awake(curr->wakeup_ticks); // update global variable
 	thread_block();
-	intr_set_level(old_level);
-	list_push_back(&sleep_list, &curr->elem);
+	intr_set_level(old_level);				  // set intr level
+	list_push_back(&sleep_list, &curr->elem); // add curr thread to sleep queue
 }
-void thread_awake(int64_t ticks); // awake thread from sleep_list
+void thread_awake(int64_t ticks)
+{
+
+} // awake thread from sleep_list

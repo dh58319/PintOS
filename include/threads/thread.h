@@ -147,7 +147,7 @@ void do_iret(struct intr_frame *tf);
 /*--------------------functions to implement ----------------------*/
 void thread_sleep(int64_t ticks); // running thread to sleep state
 void thread_awake(int64_t ticks); // awake thread from sleep_list
-static void update_tick_awake(int64_t tick);
+static void update_tick_to_awake(int64_t tick);
 int64_t get_next_tick(void);
 
 #endif /* threads/thread.h */
