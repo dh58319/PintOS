@@ -199,7 +199,6 @@ void list_splice(struct list_elem *before,
 	before->prev->next = first;
 	before->prev = last;
 }
-
 /* Inserts ELEM at the beginning of LIST, so that it becomes the
    front in LIST. */
 void list_push_front(struct list *list, struct list_elem *elem)

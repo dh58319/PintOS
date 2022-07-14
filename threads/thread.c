@@ -66,7 +66,6 @@ static void init_thread(struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule(void);
 static tid_t allocate_tid(void);
-static void update_tick_awake(int64_t tick);
 int64_t get_next_tick(void);
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -631,17 +630,40 @@ void thread_sleep(int64_t ticks)
 {
 	struct thread *curr;
 	enum intr_level old_level;
-
-	curr = thread_current();	 // set curr to current thread
-	ASSERT(curr != idle_thread); // we should not to make idle thread to sleep
 	old_level = intr_disable();
+	curr = thread_current();				  // set curr to current thread
+	ASSERT(curr != idle_thread);			  // we should not to make idle thread to sleep
 	curr->wakeup_ticks = ticks;				  // set thread ticks to current tick
 	update_tick_to_awake(curr->wakeup_ticks); // update global variable
+	list_push_back(&sleep_list, &curr->elem);
 	thread_block();
-	intr_set_level(old_level);				  // set intr level
-	list_push_back(&sleep_list, &curr->elem); // add curr thread to sleep queue
+	intr_set_level(old_level); // set intr level
+							   // add curr thread to sleep queue
 }
 void thread_awake(int64_t ticks)
 {
+	struct thread *idx_thread;
+	struct list_elem *idx;
+	idx = list_begin(&sleep_list);
+	next_tick_to_awake = INT64_MAX;
 
-} // awake thread from sleep_list
+	while (idx != list_end(&sleep_list))
+	{
+		idx_thread = list_entry(idx, struct thread, elem);
+		next_tick_to_awake = INT64_MAX;
+		// printf("******************************\n");
+		if (ticks >= idx_thread->wakeup_ticks)
+		{
+			idx = list_remove(&idx_thread->elem);
+			thread_unblock(idx_thread);
+			// printf("-----------catch----------");
+		}
+		else
+		{
+			idx = list_next(idx);
+			update_tick_to_awake(idx_thread->wakeup_ticks);
+			// printf("-----------catch2----------\n");
+		}
+	}
+}
+// awake thread from sleep_list
