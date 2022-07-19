@@ -92,7 +92,7 @@ struct thread
 	enum thread_status status; /* Thread state. */
 	char name[16];			   /* Name (for debugging purposes). */
 	int priority;			   /* Priority. */
-	int64_t wakeup_ticks;
+
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; /* List element. */
 
@@ -107,7 +107,8 @@ struct thread
 
 	/* Owned by thread.c. */
 	struct intr_frame tf; /* Information for switching */
-	unsigned magic;		  /* Detects stack overflow. */
+	int64_t wakeup_ticks;
+	unsigned magic; /* Detects stack overflow. */
 };
 
 /* If false (default), use round-robin scheduler.

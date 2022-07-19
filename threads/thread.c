@@ -213,6 +213,18 @@ tid_t thread_create(const char *name, int priority,
 	return tid;
 }
 
+static void update_tick_to_awake(int64_t tick)
+{
+	if (next_tick_to_awake > tick)
+	{
+		next_tick_to_awake = tick;
+	}
+}
+int64_t get_next_tick(void)
+{
+	return next_tick_to_awake;
+}
+
 /* Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().
 
@@ -614,43 +626,30 @@ allocate_tid(void)
 
 /* Code I implemented */
 
-static void update_tick_to_awake(int64_t tick)
-{
-	if (next_tick_to_awake > tick)
-	{
-		next_tick_to_awake = tick;
-	}
-}
-int64_t get_next_tick(void)
-{
-	return next_tick_to_awake;
-}
-
 void thread_sleep(int64_t ticks)
 {
 	struct thread *curr;
-	enum intr_level old_level;
-	old_level = intr_disable();
+	intr_disable();
 	curr = thread_current();				  // set curr to current thread
 	ASSERT(curr != idle_thread);			  // we should not to make idle thread to sleep
 	curr->wakeup_ticks = ticks;				  // set thread ticks to current tick
 	update_tick_to_awake(curr->wakeup_ticks); // update global variable
 	list_push_back(&sleep_list, &curr->elem);
+
 	thread_block();
-	intr_set_level(old_level); // set intr level
-							   // add curr thread to sleep queue
+	intr_enable();
+
+	//  add curr thread to sleep queue
 }
 void thread_awake(int64_t ticks)
 {
-	struct thread *idx_thread;
 	struct list_elem *idx;
 	idx = list_begin(&sleep_list);
 	next_tick_to_awake = INT64_MAX;
 
 	while (idx != list_end(&sleep_list))
 	{
-		idx_thread = list_entry(idx, struct thread, elem);
-		next_tick_to_awake = INT64_MAX;
+		struct thread *idx_thread = list_entry(idx, struct thread, elem);
 		// printf("******************************\n");
 		if (ticks >= idx_thread->wakeup_ticks)
 		{
