@@ -644,24 +644,25 @@ void thread_sleep(int64_t ticks)
 void thread_awake(int64_t ticks)
 {
 
-	struct list_elem *idx;
+	struct list_elem *idx, *idx_target;
 	struct thread *idx_thread;
 	next_tick_to_awake = INT64_MAX;
 
 	idx = list_begin(&sleep_list);
-
 	while (idx != list_end(&sleep_list))
 	{
 		idx_thread = list_entry(idx, struct thread, elem);
 		// printf("******************************\n");
 		if (ticks >= idx_thread->wakeup_ticks)
 		{
-			idx = list_remove(&idx_thread->elem);
+			idx_target= idx;// list next entry 있는 지 확인 후 다음 인덱스로 변경시켜 준 뒤 삭제
+			idx = list_next(idx);
+			idx_target = list_remove(&idx_thread->elem);
 			thread_unblock(idx_thread);
 			// printf("-----------catch----------");
 		}
-		else
-		{
+	
+		else{
 			idx = list_next(idx);
 			update_tick_to_awake(idx_thread->wakeup_ticks);
 			// printf("-----------catch2----------\n");
