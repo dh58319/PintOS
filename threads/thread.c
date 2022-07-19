@@ -643,13 +643,16 @@ void thread_sleep(int64_t ticks)
 }
 void thread_awake(int64_t ticks)
 {
+
 	struct list_elem *idx;
-	idx = list_begin(&sleep_list);
+	struct thread *idx_thread;
 	next_tick_to_awake = INT64_MAX;
+
+	idx = list_begin(&sleep_list);
 
 	while (idx != list_end(&sleep_list))
 	{
-		struct thread *idx_thread = list_entry(idx, struct thread, elem);
+		idx_thread = list_entry(idx, struct thread, elem);
 		// printf("******************************\n");
 		if (ticks >= idx_thread->wakeup_ticks)
 		{
