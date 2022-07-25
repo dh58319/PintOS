@@ -150,4 +150,7 @@ void thread_sleep(int64_t ticks); // running thread to sleep state
 void thread_awake(int64_t ticks); // awake thread from sleep_list
 int64_t get_next_tick(void);
 
+void test_max_priority(void);															   // compare current thread and highest priority thread
+bool cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED); // compare thread priority
+
 #endif /* threads/thread.h */
