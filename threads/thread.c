@@ -629,43 +629,37 @@ allocate_tid(void)
 void thread_sleep(int64_t ticks)
 {
 	struct thread *curr;
-	intr_disable();
-	curr = thread_current();				  // set curr to current thread
-	ASSERT(curr != idle_thread);			  // we should not to make idle thread to sleep
+	curr = thread_current(); // set curr to current thread
+	enum intr_level old_level;
+	ASSERT(curr != idle_thread); // we should not to make idle thread to sleep
+	old_level = intr_disable();
 	curr->wakeup_ticks = ticks;				  // set thread ticks to current tick
 	update_tick_to_awake(curr->wakeup_ticks); // update global variable
 	list_push_back(&sleep_list, &curr->elem);
-
 	thread_block();
-	intr_enable();
+	intr_set_level(old_level);
 
 	//  add curr thread to sleep queue
 }
 void thread_awake(int64_t ticks)
 {
 
-	struct list_elem *idx, *idx_target;
+	struct list_elem *idx = list_begin(&sleep_list);
 	struct thread *idx_thread;
 	next_tick_to_awake = INT64_MAX;
-
-	idx = list_begin(&sleep_list);
-	while (idx != list_end(&sleep_list))
+	for (idx; idx != list_end(&sleep_list);)
 	{
 		idx_thread = list_entry(idx, struct thread, elem);
-		// printf("******************************\n");
-		if (ticks >= idx_thread->wakeup_ticks)
+
+		if (idx_thread->wakeup_ticks <= ticks)
 		{
-			idx_target= idx;// list next entry 있는 지 확인 후 다음 인덱스로 변경시켜 준 뒤 삭제
-			idx = list_next(idx);
-			idx_target = list_remove(&idx_thread->elem);
+			idx = list_remove(&idx_thread->elem);
 			thread_unblock(idx_thread);
-			// printf("-----------catch----------");
 		}
-	
-		else{
-			idx = list_next(idx);
+		else
+		{
 			update_tick_to_awake(idx_thread->wakeup_ticks);
-			// printf("-----------catch2----------\n");
+			idx = list_next(idx);
 		}
 	}
 }
