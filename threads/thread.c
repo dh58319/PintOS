@@ -210,6 +210,7 @@ tid_t thread_create(const char *name, int priority,
 	/* Add to run queue. */
 	thread_unblock(t);
 
+
 	return tid;
 }
 
@@ -664,3 +665,10 @@ void thread_awake(int64_t ticks)
 	}
 }
 // awake thread from sleep_list
+
+bool cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+
+	thread_a = list_entry(a, struct thread, elem);
+	thread_b = list_entry(b, struct thread, elem);
+	if((tread_a->priority) > (thread_b->priority)) ? true :false `
+}
