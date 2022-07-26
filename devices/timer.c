@@ -132,7 +132,7 @@ timer_interrupt(struct intr_frame *args UNUSED)
 	ticks++;
 	thread_tick();
 
-	if (get_next_tick() <= ticks) // check the thread to awake and invoke the function
+	if (get_next_tick() <=  ticks) // check the thread to awake and invoke the function
 	{
 		thread_awake(ticks);
 	}
