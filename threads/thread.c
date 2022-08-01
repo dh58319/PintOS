@@ -48,6 +48,8 @@ static long long idle_ticks;				   /* # of timer ticks spent idle. */
 static long long kernel_ticks;				   /* # of timer ticks in kernel threads. */
 static long long user_ticks;				   /* # of timer ticks in user programs. */
 static int64_t next_tick_to_awake = INT64_MAX; //-------------------------------------------------
+static bool ready_list_compare(const struct list_elem *,
+							   const struct list_elem *, void *);
 
 /* Scheduling. */
 #define TIME_SLICE 4		  /* # of timer ticks to give each thread. */
@@ -255,7 +257,7 @@ void thread_unblock(struct thread *t)
 
 	old_level = intr_disable();
 	ASSERT(t->status == THREAD_BLOCKED);
-	list_insert_ordered(&ready_list, &t->elem, &cmp_priority, NULL);
+	list_insert_ordered(&ready_list, &t->elem, ready_list_compare, NULL);
 	t->status = THREAD_READY;
 	intr_set_level(old_level);
 }
@@ -320,7 +322,7 @@ void thread_yield(void)
 
 	old_level = intr_disable();
 	if (curr != idle_thread)
-		list_insert_ordered(&ready_list, &curr->elem, &cmp_priority, NULL);
+		list_insert_ordered(&ready_list, &curr->elem, ready_list_compare, NULL);
 	do_schedule(THREAD_READY);
 	intr_set_level(old_level);
 }
@@ -330,6 +332,21 @@ void thread_set_priority(int new_priority)
 {
 	thread_current()->priority = new_priority;
 	test_max_priority();
+}
+bool thread_compare_priority(const struct thread *a, const struct thread *b)
+{
+	// 값이 큰 것이 우선합니다.
+	return a->priority > b->priority;
+}
+
+// ready_list 원소를 우선순위 규칙에 의해 비교합니다.
+// list_sort 계열 함수에 사용할 수 있습니다.
+static bool
+ready_list_compare(const struct list_elem *a, const struct list_elem *b,
+				   void *aux UNUSED)
+{
+	return thread_compare_priority(list_entry(a, struct thread, elem),
+								   list_entry(b, struct thread, elem));
 }
 
 /* Returns the current thread's priority. */
@@ -666,13 +683,6 @@ void thread_awake(int64_t ticks)
 }
 // awake thread from sleep_list
 
-bool cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
-{
-	struct thread *thread_a, *thread_b;
-	thread_a = list_entry(a, struct thread, elem);
-	thread_b = list_entry(b, struct thread, elem);
-	return thread_a->priority > (thread_b->priority) ? true : false;
-}
 void test_max_priority(void)
 {
 	if (list_empty(&ready_list))
@@ -688,4 +698,19 @@ void test_max_priority(void)
 	{
 		thread_yield();
 	}
+}
+
+void thread_preempt(void)
+{
+	enum intr_level old_level;
+	old_level = intr_disable();
+
+	if (!list_empty(&ready_list) &&
+		thread_current()->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority)
+	{
+
+		intr_set_level(old_level);
+		thread_yield();
+	}
+	intr_set_level(old_level);
 }
