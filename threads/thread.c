@@ -183,6 +183,7 @@ tid_t thread_create(const char *name, int priority,
 					thread_func *function, void *aux)
 {
 	struct thread *t;
+	struct thread *curr = thread_current();
 	tid_t tid;
 
 	ASSERT(function != NULL);
@@ -209,6 +210,10 @@ tid_t thread_create(const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock(t);
+	if (cmp_priority(&t->elem, &curr->elem, NULL))
+	{
+		thread_yield();
+	}
 
 	return tid;
 }
@@ -668,10 +673,12 @@ void thread_awake(int64_t ticks)
 
 bool cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
-	struct thread *thread_a, *thread_b;
-	thread_a = list_entry(a, struct thread, elem);
-	thread_b = list_entry(b, struct thread, elem);
-	return thread_a->priority > (thread_b->priority) ? true : false;
+	struct thread *t_a;
+	struct thread *t_b;
+
+	t_a = list_entry(a, struct thread, elem);
+	t_b = list_entry(b, struct thread, elem);
+	return ((t_a->priority) > (t_b->priority)) ? true : false;
 }
 void test_max_priority(void)
 {
@@ -684,7 +691,7 @@ void test_max_priority(void)
 	struct list_elem *e = list_begin(&ready_list);
 	struct thread *t = list_entry(e, struct thread, elem);
 
-	if (run_priority < t->priority)
+	if (t->priority > run_priority)
 	{
 		thread_yield();
 	}
