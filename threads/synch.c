@@ -47,6 +47,17 @@ void sema_init(struct semaphore *sema, unsigned value)
 
 	sema->value = value;
 	list_init(&sema->waiters);
+<<<<<<< HEAD
+=======
+}
+
+static bool
+sema_waiters_compare(const struct list_elem *a,
+					 const struct list_elem *b, void *aux UNUSED)
+{
+	return thread_compare_priority(list_entry(a, struct thread, elem),
+								   list_entry(b, struct thread, elem));
+>>>>>>> c9934ac7a8b901b608add65a25c4ea429ddd8ac0
 }
 
 /* Down or "P" operation on a semaphore.  Waits for SEMA's value
@@ -67,7 +78,11 @@ void sema_down(struct semaphore *sema)
 	old_level = intr_disable();
 	while (sema->value == 0)
 	{
+<<<<<<< HEAD
 		list_insert_ordered(&sema->waiters, &thread_current()->elem, &cmp_priority, NULL);
+=======
+		list_insert_ordered(&sema->waiters, &thread_current()->elem, sema_waiters_compare, NULL);
+>>>>>>> c9934ac7a8b901b608add65a25c4ea429ddd8ac0
 		thread_block();
 	}
 	sema->value--;
@@ -110,10 +125,16 @@ void sema_up(struct semaphore *sema)
 	ASSERT(sema != NULL);
 
 	old_level = intr_disable();
+<<<<<<< HEAD
 
 	if (!list_empty(&sema->waiters))
 	{
 		list_sort(&sema->waiters, &cmp_priority, NULL);
+=======
+	if (!list_empty(&sema->waiters))
+	{
+		list_sort(&sema->waiters, sema_waiters_compare, NULL);
+>>>>>>> c9934ac7a8b901b608add65a25c4ea429ddd8ac0
 		thread_unblock(list_entry(list_pop_front(&sema->waiters),
 								  struct thread, elem));
 	}
@@ -272,6 +293,28 @@ void cond_init(struct condition *cond)
 	ASSERT(cond != NULL);
 
 	list_init(&cond->waiters);
+<<<<<<< HEAD
+=======
+}
+
+static bool
+cond_waiters_compare(const struct list_elem *a,
+					 const struct list_elem *b, void *aux UNUSED)
+{
+	struct semaphore_elem *sa, *sb;
+	struct thread *ta, *tb;
+
+	sa = list_entry(a, struct semaphore_elem, elem);
+	sb = list_entry(b, struct semaphore_elem, elem);
+
+	ASSERT(!list_empty(&sa->semaphore.waiters));
+	ASSERT(!list_empty(&sb->semaphore.waiters));
+
+	ta = list_entry(list_front(&sa->semaphore.waiters), struct thread, elem);
+	tb = list_entry(list_front(&sb->semaphore.waiters), struct thread, elem);
+
+	return thread_compare_priority(ta, tb);
+>>>>>>> c9934ac7a8b901b608add65a25c4ea429ddd8ac0
 }
 
 /* Atomically releases LOCK and waits for COND to be signaled by
