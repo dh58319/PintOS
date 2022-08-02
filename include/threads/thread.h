@@ -96,6 +96,10 @@ struct thread
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; /* List element. */
 
+	int init_priority;
+	struct lock *wait_on_lock;
+	struct list donations;
+	struct list_elem donation_elem;
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4; /* Page map level 4 */
@@ -153,7 +157,8 @@ int64_t get_next_tick(void);
 void test_max_priority(void);															   // compare current thread and highest priority thread
 bool cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED); // compare thread priority
 
-bool thread_compare_priority(const struct thread *a, const struct thread *b);
-void thread_preempt(void);
+void donate_priority(void);
+void remove_with_lock(struct lock *);
+void refresh_priority(void);
 
 #endif /* threads/thread.h */
