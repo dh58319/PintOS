@@ -231,6 +231,7 @@ void lock_release(struct lock *lock)
 
 	remove_with_lock(lock);
 	refresh_priority();
+	lock->holder = NULL;
 	sema_up(&lock->semaphore);
 }
 

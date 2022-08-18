@@ -2,6 +2,7 @@
 	"files.associations": {
 		"*.inc": "c",
 		"*.tcc": "c",
-		"string_view": "c"
+		"string_view": "c",
+		"synch.h": "c"
 	}
 }

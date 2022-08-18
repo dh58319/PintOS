@@ -208,6 +208,19 @@ tid_t thread_create(const char *name, int priority,
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
 
+	t->fdt = palloc_get_page(PAL_ZERO);
+	if (t->fdt == NULL)
+	{
+		return TID_ERROR;
+	}
+	t->fdt[0] = 0;
+	t->fdt[1] = 1;
+	t->next_fd = 2;
+
+	sema_init(&t->fork_sema, 0);
+	sema_init(&t->load_sema, 0);
+	sema_init(&t->exit_sema, 0);
+
 	/* Add to run queue. */
 	thread_unblock(t);
 	if (cmp_priority(&t->elem, &curr->elem, NULL))
@@ -310,6 +323,7 @@ void thread_exit(void)
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
 	intr_disable();
+	// list_remove(&thread_current()->allelem);
 	do_schedule(THREAD_DYING);
 	NOT_REACHED();
 }
@@ -334,9 +348,11 @@ void thread_yield(void)
 void thread_set_priority(int new_priority)
 {
 	/* ==================== project1 Prioirity Scheduling ==================== */
+	thread_current()->priority = new_priority;
 	thread_current()->init_priority = new_priority;
-	// thread_current ()->priority = new_priority;
+
 	refresh_priority();
+	donate_priority();
 	test_max_priority();
 	/* ==================== project1 Prioirity Scheduling ==================== */
 }
@@ -350,6 +366,11 @@ int thread_get_priority(void)
 void thread_set_nice(int nice UNUSED)
 {
 	/* TODO: Your implementation goes here */
+	// enum intr_level old_level = intr_disable();
+	// thread_current()->nice = nice;
+	// mlfqs_priority(thread_current());
+	// test_max_priority();
+	// intr_set_level(old_level);
 }
 
 /* Returns the current thread's nice value. */
@@ -446,6 +467,10 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->init_priority = priority;
 	list_init(&t->donations);
 	t->wait_on_lock = NULL;
+
+	t->exit_status = 0;
+	// t->run_file = NULL;
+	list_init(&t->child_list);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -644,6 +669,7 @@ void thread_sleep(int64_t ticks)
 	struct thread *curr;
 	curr = thread_current(); // set curr to current thread
 	enum intr_level old_level;
+	ASSERT(!intr_context());
 	ASSERT(curr != idle_thread); // we should not to make idle thread to sleep
 	old_level = intr_disable();
 	curr->wakeup_ticks = ticks;				  // set thread ticks to current tick
@@ -689,16 +715,14 @@ bool cmp_priority(const struct list_elem *a, const struct list_elem *b, void *au
 }
 void test_max_priority(void)
 {
-	if (list_empty(&ready_list))
+	struct thread *curr_thread = thread_current();
+	struct thread *most_priority_thread = curr_thread;
+	if (!list_empty(&ready_list))
 	{
-		return;
+		most_priority_thread = list_entry(list_front(&ready_list), struct thread, elem);
 	}
 
-	int run_priority = thread_current()->priority;
-	struct list_elem *e = list_begin(&ready_list);
-	struct thread *t = list_entry(e, struct thread, elem);
-
-	if (t->priority > run_priority)
+	if (most_priority_thread->priority > curr_thread->priority)
 	{
 		thread_yield();
 	}
@@ -706,20 +730,16 @@ void test_max_priority(void)
 
 void donate_priority(void)
 {
-	int cnt = 0;
 	struct thread *t = thread_current();
-	int cur_priority = t->priority;
-
-	while (cnt < 9)
+	struct lock *lock = t->wait_on_lock;
+	int depth = 0;
+	while (lock && depth < 8)
 	{
-		cnt++;
-		if (t->wait_on_lock == NULL)
-		{
-			break;
-		}
-
-		t = t->wait_on_lock->holder;
-		t->priority = cur_priority;
+		if (!lock->holder)
+			return;
+		lock->holder->priority = t->priority;
+		lock = lock->holder->wait_on_lock;
+		depth++;
 	}
 }
 void remove_with_lock(struct lock *lock)

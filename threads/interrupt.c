@@ -19,14 +19,12 @@
 #define INTR_CNT 256
 
 /* Creates an gate that invokes FUNCTION.
-
    The gate has descriptor privilege level DPL, meaning that it
    can be invoked intentionally when the processor is in the DPL
    or lower-numbered ring.  In practice, DPL==3 allows user mode
    to call into the gate and DPL==0 prevents such calls.  Faults
    and exceptions that occur in user mode still cause gates with
    DPL==0 to be invoked.
-
    TYPE must be either 14 (for an interrupt gate) or 15 (for a
    trap gate).  The difference is that entering an interrupt gate
    disables interrupts, but entering a trap gate does not.  See
@@ -125,6 +123,7 @@ intr_get_level(void)
 
 /* Enables or disables interrupts as specified by LEVEL and
    returns the previous interrupt status. */
+// leval에 지정된대로 인터럽트를 활성화한거나 비활성화하고 이전 인터럽트 상태를 반환
 enum intr_level
 intr_set_level(enum intr_level level)
 {
@@ -139,7 +138,6 @@ intr_enable(void)
 	ASSERT(!intr_context());
 
 	/* Enable interrupts by setting the interrupt flag.
-
 	   See [IA32-v2b] "STI" and [IA32-v3a] 5.8.1 "Masking Maskable
 	   Hardware Interrupts". */
 	asm volatile("sti");
@@ -243,7 +241,6 @@ void intr_register_ext(uint8_t vec_no, intr_handler_func *handler,
 /* Registers internal interrupt VEC_NO to invoke HANDLER, which
    is named NAME for debugging purposes.  The interrupt handler
    will be invoked with interrupt status LEVEL.
-
    The handler will have descriptor privilege level DPL, meaning
    that it can be invoked intentionally when the processor is in
    the DPL or lower-numbered ring.  In practice, DPL==3 allows
@@ -285,7 +282,6 @@ void intr_yield_on_return(void)
    and accessible at ports 0xa0 and 0xa1.  Accesses to port 0x20
    set the A0 line to 0 and accesses to 0x21 set the A1 line to
    1.  The situation is similar for the slave PIC.
-
    By default, interrupts 0...15 delivered by the PICs will go to
    interrupt vectors 0...15.  Unfortunately, those vectors are
    also used for CPU traps and exceptions.  We reprogram the PICs

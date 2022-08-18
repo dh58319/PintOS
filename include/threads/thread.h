@@ -9,6 +9,8 @@
 #include "vm/vm.h"
 #endif
 
+#include "include/threads/synch.h"
+
 /* States in a thread's life cycle. */
 enum thread_status
 {
@@ -100,6 +102,20 @@ struct thread
 	struct lock *wait_on_lock;
 	struct list donations;
 	struct list_elem donation_elem;
+	//추가 syscall
+	int exit_status;
+
+	// syscall file descripter
+	struct file **fdt;
+	int next_fd;
+
+	// 추가 fork, wait
+	struct list child_list;
+	struct list_elem child_elem;
+	struct semaphore exit_sema;
+	struct semaphore load_sema;
+	struct semaphore fork_sema;
+	struct file *run_file;
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4; /* Page map level 4 */
