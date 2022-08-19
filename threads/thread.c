@@ -722,7 +722,7 @@ void test_max_priority(void)
 		most_priority_thread = list_entry(list_front(&ready_list), struct thread, elem);
 	}
 
-	if (most_priority_thread->priority > curr_thread->priority)
+	if (most_priority_thread->priority > curr_thread->priority && !intr_context())
 	{
 		thread_yield();
 	}
