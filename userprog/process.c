@@ -163,12 +163,55 @@ error:
 	thread_exit();
 }
 
+void argument_stack(int argc, char **argv, struct intr_frame *if_)
+{
+	char *arg_address[128];
+
+	/* Insert arguments' addresses */
+	for (int i = argc - 1; i >= 0; i--)
+	{
+		int argv_len = strlen(argv[i]);
+		if_->rsp = if_->rsp - (argv_len + 1);
+		memcpy(if_->rsp, argv[i], argv_len + 1);
+		arg_address[i] = if_->rsp;
+	}
+
+	/* Insert padding for word-align */
+	while (if_->rsp % 8 != 0)
+	{
+		if_->rsp--;
+		*(uint8_t *)(if_->rsp) = 0;
+	}
+
+	/* Insert addresses of strings including sentinel */
+	for (int i = argc; i >= 0; i--)
+	{
+		if_->rsp = if_->rsp - 8;
+
+		if (i == argv)
+			memset(if_->rsp, 0, sizeof(char **));
+
+		else
+			memcpy(if_->rsp, &arg_address[i], sizeof(char **));
+	}
+
+	/* Fake return address */
+	if_->rsp = if_->rsp - 8;
+	memset(if_->rsp, 0, sizeof(void *));
+
+	if_->R.rdi = argc;
+	if_->R.rsi = if_->rsp + 8;
+}
+
 /* Switch the current execution context to the f_name.
  * Returns -1 on fail. */
 int process_exec(void *f_name)
 {
 	char *file_name = f_name;
+	char *file_name_copy[48];
 	bool success;
+
+	memcpy(file_name_copy, file_name, strlen(file_name) + 1);
 
 	/* We cannot use the intr_frame in the thread structure.
 	 * This is because when current thread rescheduled,
@@ -181,13 +224,31 @@ int process_exec(void *f_name)
 	/* We first kill the current context */
 	process_cleanup();
 
+	int token_count = 0;
+	char *token, *last;
+	char *arg_list[64];
+	char *tmp_save = token;
+
+	token = strtok_r(file_name_copy, " ", &last);
+	arg_list[token_count] = token;
+
+	while (token != NULL)
+	{
+		token = strtok_r(NULL, " ", &last);
+		token_count++;
+		arg_list[token_count] = token;
+	}
+
 	/* And then load the binary */
 	success = load(file_name, &_if);
 
 	/* If load failed, quit. */
 	palloc_free_page(file_name);
+
 	if (!success)
 		return -1;
+
+	argument_stack(arg_list, token_count, &_if);
 
 	/* Start switched process. */
 	do_iret(&_if);

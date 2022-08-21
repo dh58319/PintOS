@@ -2,7 +2,7 @@
 #define USERPROG_PROCESS_H
 
 #include "threads/thread.h"
-void argument_stack(char **parse, int count, void **esp);
+void argument_stack(int argc, char **argv, struct intr_frame *if_);
 tid_t process_create_initd(const char *file_name);
 tid_t process_fork(const char *name, struct intr_frame *if_);
 int process_exec(void *f_name);
