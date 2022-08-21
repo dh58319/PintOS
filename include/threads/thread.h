@@ -115,10 +115,11 @@ struct thread
 	struct semaphore exit_sema;
 	struct semaphore load_sema;
 	struct semaphore fork_sema;
-	struct file *run_file;
+	struct file *exec_file;	
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
-	uint64_t *pml4; /* Page map level 4 */
+	uint64_t *pml4; /* Page map level 4 */	
+
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */

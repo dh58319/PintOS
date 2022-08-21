@@ -169,8 +169,6 @@ int process_exec(void *f_name)
 {
 	char *file_name = f_name;
 	bool success;
-	char file_name_copy[128];
-	memcpy(file_name_copy, file_name, strlen(file_name) + 1);
 
 	/* We cannot use the intr_frame in the thread structure.
 	 * This is because when current thread rescheduled,
@@ -182,13 +180,12 @@ int process_exec(void *f_name)
 
 	/* We first kill the current context */
 	process_cleanup();
-	memset(&_if, 0, sizeof _if);
+
 	/* And then load the binary */
-	success = load(file_name_copy, &_if);
+	success = load(file_name, &_if);
 
 	/* If load failed, quit. */
 	palloc_free_page(file_name);
-	hex_dump(_if.rsp, _if.rsp, KERN_BASE - _if.rsp, true);
 	if (!success)
 		return -1;
 
@@ -343,19 +340,6 @@ load(const char *file_name, struct intr_frame *if_)
 	off_t file_ofs;
 	bool success = false;
 	int i;
-	char *arg_list[128];
-	char *token, *save_ptr;
-	int token_count = 0;
-
-	token = strtok_r(file_name, " ", &save_ptr);
-	arg_list[token_count] = token;
-
-	while (token != NULL)
-	{
-		token = strtok_r(NULL, " ", &save_ptr);
-		token_count++;
-		arg_list[token_count] = token;
-	}
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create();
@@ -446,7 +430,6 @@ load(const char *file_name, struct intr_frame *if_)
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-	argument_stack(arg_list, token_count, if_);
 
 	success = true;
 
@@ -454,44 +437,6 @@ done:
 	/* We arrive here whether the load is successful or not. */
 	file_close(file);
 	return success;
-}
-void argument_stack(char **argv, int argc, struct intr_frame *if_)
-{
-
-	char *arg_address[128];
-	for (int i = argc - 1; i >= 0; i--)
-	{
-		int argv_len = strlen(argv[i]);
-
-		if_->rsp = if_->rsp - (argv_len + 1);
-		memcpy(if_->rsp, argv[i], argv_len + 1);
-		arg_address[i] = if_->rsp;
-	}
-
-	while (if_->rsp % 8 != 0)
-	{
-		if_->rsp--;
-		*(uint8_t *)if_->rsp = 0;
-	}
-
-	for (int i = argc; i >= 0; i--)
-	{
-		if_->rsp = if_->rsp - 8;
-		if (i == argc)
-		{
-			memset(if_->rsp, 0, sizeof(char **));
-		}
-		else
-		{
-			memcpy(if_->rsp, &arg_address[i], sizeof(char **));
-		}
-	}
-
-	if_->rsp = if_->rsp - 8;
-	memset(if_->rsp, 0, sizeof(void *));
-
-	if_->R.rdi = argc;
-	if_->R.rsi = if_->rsp + 8;
 }
 
 /* Checks whether PHDR describes a valid, loadable segment in
