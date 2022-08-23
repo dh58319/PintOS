@@ -345,8 +345,7 @@ load(const char *file_name, struct intr_frame *if_)
 	process_activate(thread_current());
 
 	/* Open executable file. */
-
-	file = filesys_open(argv[0]);
+	file = filesys_open(file_name);
 	if (file == NULL)
 	{
 		printf("load: %s: open failed\n", file_name);
@@ -368,15 +367,12 @@ load(const char *file_name, struct intr_frame *if_)
 		struct Phdr phdr;
 
 		if (file_ofs < 0 || file_ofs > file_length(file))
-			printf("------ %d %lx %lx-----\n", ehdr.e_phnum);
-		if (file_ofs < 0 || file_ofs > file_length(file))
 			goto done;
 		file_seek(file, file_ofs);
 
 		if (file_read(file, &phdr, sizeof phdr) != sizeof phdr)
 			goto done;
 		file_ofs += sizeof phdr;
-
 		switch (phdr.p_type)
 		{
 		case PT_NULL:
@@ -398,7 +394,6 @@ load(const char *file_name, struct intr_frame *if_)
 				uint64_t mem_page = phdr.p_vaddr & ~PGMASK;
 				uint64_t page_offset = phdr.p_vaddr & PGMASK;
 				uint32_t read_bytes, zero_bytes;
-				printf("%lx %lx %lx %lx\n", file_page, mem_page, page_offset, phdr.p_filesz);
 				if (phdr.p_filesz > 0)
 				{
 					/* Normal segment.
@@ -407,248 +402,259 @@ load(const char *file_name, struct intr_frame *if_)
 					zero_bytes = (ROUND_UP(page_offset + phdr.p_memsz, PGSIZE) - read_bytes);
 				}
 				else
+				{
+					/* Entirely zero.
+					 * Don't read anything from disk. */
+					read_bytes = 0;
+					zero_bytes = ROUND_UP(page_offset + phdr.p_memsz, PGSIZE);
+				}
+				if (!load_segment(file, file_page, (void *)mem_page,
+								  read_bytes, zero_bytes, writable))
 					goto done;
-				break;
 			}
+			else
+				goto done;
+			break;
 		}
-
-		/* Set up stack. */
-		if (!setup_stack(if_))
-			goto done;
-
-		/* Start address. */
-		if_->rip = ehdr.e_entry;
-
-		/* TODO: Your code goes here.
-		 * TODO: Implement argument passing (see project2/argument_passing.html). */
-
-		success = true;
-
-	done:
-		/* We arrive here whether the load is successful or not. */
-		file_close(file);
-		return success;
 	}
 
-	/* Checks whether PHDR describes a valid, loadable segment in
-	 * FILE and returns true if so, false otherwise. */
-	static bool
-	validate_segment(const struct Phdr *phdr, struct file *file)
-	{
-		/* p_offset and p_vaddr must have the same page offset. */
-		if ((phdr->p_offset & PGMASK) != (phdr->p_vaddr & PGMASK))
-			return false;
+	/* Set up stack. */
+	if (!setup_stack(if_))
+		goto done;
 
-		/* p_offset must point within FILE. */
-		if (phdr->p_offset > (uint64_t)file_length(file))
-			return false;
+	/* Start address. */
+	if_->rip = ehdr.e_entry;
 
-		/* p_memsz must be at least as big as p_filesz. */
-		if (phdr->p_memsz < phdr->p_filesz)
-			return false;
+	/* TODO: Your code goes here.
+	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 
-		/* The segment must not be empty. */
-		if (phdr->p_memsz == 0)
-			return false;
+	success = true;
 
-		/* The virtual memory region must both start and end within the
-		   user address space range. */
-		if (!is_user_vaddr((void *)phdr->p_vaddr))
-			return false;
-		if (!is_user_vaddr((void *)(phdr->p_vaddr + phdr->p_memsz)))
-			return false;
+done:
+	/* We arrive here whether the load is successful or not. */
+	file_close(file);
+	return success;
+}
 
-		/* The region cannot "wrap around" across the kernel virtual
-		   address space. */
-		if (phdr->p_vaddr + phdr->p_memsz < phdr->p_vaddr)
-			return false;
+/* Checks whether PHDR describes a valid, loadable segment in
+ * FILE and returns true if so, false otherwise. */
+static bool
+validate_segment(const struct Phdr *phdr, struct file *file)
+{
+	/* p_offset and p_vaddr must have the same page offset. */
+	if ((phdr->p_offset & PGMASK) != (phdr->p_vaddr & PGMASK))
+		return false;
 
-		/* Disallow mapping page 0.
-		   Not only is it a bad idea to map page 0, but if we allowed
-		   it then user code that passed a null pointer to system calls
-		   could quite likely panic the kernel by way of null pointer
-		   assertions in memcpy(), etc. */
-		if (phdr->p_vaddr < PGSIZE)
-			return false;
+	/* p_offset must point within FILE. */
+	if (phdr->p_offset > (uint64_t)file_length(file))
+		return false;
 
-		/* It's okay. */
-		return true;
-	}
+	/* p_memsz must be at least as big as p_filesz. */
+	if (phdr->p_memsz < phdr->p_filesz)
+		return false;
+
+	/* The segment must not be empty. */
+	if (phdr->p_memsz == 0)
+		return false;
+
+	/* The virtual memory region must both start and end within the
+	   user address space range. */
+	if (!is_user_vaddr((void *)phdr->p_vaddr))
+		return false;
+	if (!is_user_vaddr((void *)(phdr->p_vaddr + phdr->p_memsz)))
+		return false;
+
+	/* The region cannot "wrap around" across the kernel virtual
+	   address space. */
+	if (phdr->p_vaddr + phdr->p_memsz < phdr->p_vaddr)
+		return false;
+
+	/* Disallow mapping page 0.
+	   Not only is it a bad idea to map page 0, but if we allowed
+	   it then user code that passed a null pointer to system calls
+	   could quite likely panic the kernel by way of null pointer
+	   assertions in memcpy(), etc. */
+	if (phdr->p_vaddr < PGSIZE)
+		return false;
+
+	/* It's okay. */
+	return true;
+}
 
 #ifndef VM
-	/* Codes of this block will be ONLY USED DURING project 2.
-	 * If you want to implement the function for whole project 2, implement it
-	 * outside of #ifndef macro. */
+/* Codes of this block will be ONLY USED DURING project 2.
+ * If you want to implement the function for whole project 2, implement it
+ * outside of #ifndef macro. */
 
-	/* load() helpers. */
-	static bool install_page(void *upage, void *kpage, bool writable);
+/* load() helpers. */
+static bool install_page(void *upage, void *kpage, bool writable);
 
-	/* Loads a segment starting at offset OFS in FILE at address
-	 * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
-	 * memory are initialized, as follows:
-	 *
-	 * - READ_BYTES bytes at UPAGE must be read from FILE
-	 * starting at offset OFS.
-	 *
-	 * - ZERO_BYTES bytes at UPAGE + READ_BYTES must be zeroed.
-	 *
-	 * The pages initialized by this function must be writable by the
-	 * user process if WRITABLE is true, read-only otherwise.
-	 *
-	 * Return true if successful, false if a memory allocation error
-	 * or disk read error occurs. */
-	static bool
-	load_segment(struct file * file, off_t ofs, uint8_t * upage,
-				 uint32_t read_bytes, uint32_t zero_bytes, bool writable)
+/* Loads a segment starting at offset OFS in FILE at address
+ * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
+ * memory are initialized, as follows:
+ *
+ * - READ_BYTES bytes at UPAGE must be read from FILE
+ * starting at offset OFS.
+ *
+ * - ZERO_BYTES bytes at UPAGE + READ_BYTES must be zeroed.
+ *
+ * The pages initialized by this function must be writable by the
+ * user process if WRITABLE is true, read-only otherwise.
+ *
+ * Return true if successful, false if a memory allocation error
+ * or disk read error occurs. */
+static bool
+load_segment(struct file *file, off_t ofs, uint8_t *upage,
+			 uint32_t read_bytes, uint32_t zero_bytes, bool writable)
+{
+	ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
+	ASSERT(pg_ofs(upage) == 0);
+	ASSERT(ofs % PGSIZE == 0);
+
+	file_seek(file, ofs);
+	while (read_bytes > 0 || zero_bytes > 0)
 	{
-		ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
-		ASSERT(pg_ofs(upage) == 0);
-		ASSERT(ofs % PGSIZE == 0);
+		/* Do calculate how to fill this page.
+		 * We will read PAGE_READ_BYTES bytes from FILE
+		 * and zero the final PAGE_ZERO_BYTES bytes. */
+		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-		file_seek(file, ofs);
-		while (read_bytes > 0 || zero_bytes > 0)
+		/* Get a page of memory. */
+		uint8_t *kpage = palloc_get_page(PAL_USER);
+		if (kpage == NULL)
+			return false;
+
+		/* Load this page. */
+		if (file_read(file, kpage, page_read_bytes) != (int)page_read_bytes)
 		{
-			/* Do calculate how to fill this page.
-			 * We will read PAGE_READ_BYTES bytes from FILE
-			 * and zero the final PAGE_ZERO_BYTES bytes. */
-			size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-			size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
-			/* Get a page of memory. */
-			uint8_t *kpage = palloc_get_page(PAL_USER);
-			if (kpage == NULL)
-				return false;
-
-			/* Load this page. */
-			if (file_read(file, kpage, page_read_bytes) != (int)page_read_bytes)
-			{
-				palloc_free_page(kpage);
-				return false;
-			}
-			memset(kpage + page_read_bytes, 0, page_zero_bytes);
-
-			/* Add the page to the process's address space. */
-			if (!install_page(upage, kpage, writable))
-			{
-				printf("fail\n");
-				palloc_free_page(kpage);
-				return false;
-			}
-
-			/* Advance. */
-			read_bytes -= page_read_bytes;
-			zero_bytes -= page_zero_bytes;
-			upage += PGSIZE;
+			palloc_free_page(kpage);
+			return false;
 		}
-		return true;
-	}
+		memset(kpage + page_read_bytes, 0, page_zero_bytes);
 
-	/* Create a minimal stack by mapping a zeroed page at the USER_STACK */
-	static bool
-		setup_stack(struct intr_frame * if_)
-	{
-		uint8_t *kpage;
-		bool success = false;
-
-		kpage = palloc_get_page(PAL_USER | PAL_ZERO);
-		if (kpage != NULL)
+		/* Add the page to the process's address space. */
+		if (!install_page(upage, kpage, writable))
 		{
-			success = install_page(((uint8_t *)USER_STACK) - PGSIZE, kpage, true);
-			if (success)
-				if_->rsp = USER_STACK;
-			else
-				palloc_free_page(kpage);
+			printf("fail\n");
+			palloc_free_page(kpage);
+			return false;
 		}
-		return success;
-	}
 
-	/* Adds a mapping from user virtual address UPAGE to kernel
-	 * virtual address KPAGE to the page table.
-	 * If WRITABLE is true, the user process may modify the page;
-	 * otherwise, it is read-only.
-	 * UPAGE must not already be mapped.
-	 * KPAGE should probably be a page obtained from the user pool
-	 * with palloc_get_page().
-	 * Returns true on success, false if UPAGE is already mapped or
-	 * if memory allocation fails. */
-	static bool
-	install_page(void *upage, void *kpage, bool writable)
+		/* Advance. */
+		read_bytes -= page_read_bytes;
+		zero_bytes -= page_zero_bytes;
+		upage += PGSIZE;
+	}
+	return true;
+}
+
+/* Create a minimal stack by mapping a zeroed page at the USER_STACK */
+static bool
+setup_stack(struct intr_frame *if_)
+{
+	uint8_t *kpage;
+	bool success = false;
+
+	kpage = palloc_get_page(PAL_USER | PAL_ZERO);
+	if (kpage != NULL)
 	{
-		struct thread *t = thread_current();
-
-		/* Verify that there's not already a page at that virtual
-		 * address, then map our page there. */
-		return (pml4_get_page(t->pml4, upage) == NULL && pml4_set_page(t->pml4, upage, kpage, writable));
+		success = install_page(((uint8_t *)USER_STACK) - PGSIZE, kpage, true);
+		if (success)
+			if_->rsp = USER_STACK;
+		else
+			palloc_free_page(kpage);
 	}
+	return success;
+}
+
+/* Adds a mapping from user virtual address UPAGE to kernel
+ * virtual address KPAGE to the page table.
+ * If WRITABLE is true, the user process may modify the page;
+ * otherwise, it is read-only.
+ * UPAGE must not already be mapped.
+ * KPAGE should probably be a page obtained from the user pool
+ * with palloc_get_page().
+ * Returns true on success, false if UPAGE is already mapped or
+ * if memory allocation fails. */
+static bool
+install_page(void *upage, void *kpage, bool writable)
+{
+	struct thread *t = thread_current();
+
+	/* Verify that there's not already a page at that virtual
+	 * address, then map our page there. */
+	return (pml4_get_page(t->pml4, upage) == NULL && pml4_set_page(t->pml4, upage, kpage, writable));
+}
 #else
-	/* From here, codes will be used after project 3.
-	 * If you want to implement the function for only project 2, implement it on the
-	 * upper block. */
+/* From here, codes will be used after project 3.
+ * If you want to implement the function for only project 2, implement it on the
+ * upper block. */
 
-	static bool
-	lazy_load_segment(struct page * page, void *aux)
+static bool
+lazy_load_segment(struct page *page, void *aux)
+{
+	/* TODO: Load the segment from the file */
+	/* TODO: This called when the first page fault occurs on address VA. */
+	/* TODO: VA is available when calling this function. */
+}
+
+/* Loads a segment starting at offset OFS in FILE at address
+ * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
+ * memory are initialized, as follows:
+ *
+ * - READ_BYTES bytes at UPAGE must be read from FILE
+ * starting at offset OFS.
+ *
+ * - ZERO_BYTES bytes at UPAGE + READ_BYTES must be zeroed.
+ *
+ * The pages initialized by this function must be writable by the
+ * user process if WRITABLE is true, read-only otherwise.
+ *
+ * Return true if successful, false if a memory allocation error
+ * or disk read error occurs. */
+static bool
+load_segment(struct file *file, off_t ofs, uint8_t *upage,
+			 uint32_t read_bytes, uint32_t zero_bytes, bool writable)
+{
+	ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
+	ASSERT(pg_ofs(upage) == 0);
+	ASSERT(ofs % PGSIZE == 0);
+
+	while (read_bytes > 0 || zero_bytes > 0)
 	{
-		/* TODO: Load the segment from the file */
-		/* TODO: This called when the first page fault occurs on address VA. */
-		/* TODO: VA is available when calling this function. */
+		/* Do calculate how to fill this page.
+		 * We will read PAGE_READ_BYTES bytes from FILE
+		 * and zero the final PAGE_ZERO_BYTES bytes. */
+		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+		size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+		/* TODO: Set up aux to pass information to the lazy_load_segment. */
+		void *aux = NULL;
+		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
+											writable, lazy_load_segment, aux))
+			return false;
+
+		/* Advance. */
+		read_bytes -= page_read_bytes;
+		zero_bytes -= page_zero_bytes;
+		upage += PGSIZE;
 	}
+	return true;
+}
 
-	/* Loads a segment starting at offset OFS in FILE at address
-	 * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
-	 * memory are initialized, as follows:
-	 *
-	 * - READ_BYTES bytes at UPAGE must be read from FILE
-	 * starting at offset OFS.
-	 *
-	 * - ZERO_BYTES bytes at UPAGE + READ_BYTES must be zeroed.
-	 *
-	 * The pages initialized by this function must be writable by the
-	 * user process if WRITABLE is true, read-only otherwise.
-	 *
-	 * Return true if successful, false if a memory allocation error
-	 * or disk read error occurs. */
-	static bool
-	load_segment(struct file * file, off_t ofs, uint8_t * upage,
-				 uint32_t read_bytes, uint32_t zero_bytes, bool writable)
-	{
-		ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
-		ASSERT(pg_ofs(upage) == 0);
-		ASSERT(ofs % PGSIZE == 0);
+/* Create a PAGE of stack at the USER_STACK. Return true on success. */
+static bool
+setup_stack(struct intr_frame *if_)
+{
+	bool success = false;
+	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 
-		while (read_bytes > 0 || zero_bytes > 0)
-		{
-			/* Do calculate how to fill this page.
-			 * We will read PAGE_READ_BYTES bytes from FILE
-			 * and zero the final PAGE_ZERO_BYTES bytes. */
-			size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-			size_t page_zero_bytes = PGSIZE - page_read_bytes;
+	/* TODO: Map the stack on stack_bottom and claim the page immediately.
+	 * TODO: If success, set the rsp accordingly.
+	 * TODO: You should mark the page is stack. */
+	/* TODO: Your code goes here */
 
-			/* TODO: Set up aux to pass information to the lazy_load_segment. */
-			void *aux = NULL;
-			if (!vm_alloc_page_with_initializer(VM_ANON, upage,
-												writable, lazy_load_segment, aux))
-				return false;
-
-			/* Advance. */
-			read_bytes -= page_read_bytes;
-			zero_bytes -= page_zero_bytes;
-			upage += PGSIZE;
-		}
-		return true;
-	}
-
-	/* Create a PAGE of stack at the USER_STACK. Return true on success. */
-	static bool
-		setup_stack(struct intr_frame * if_)
-	{
-		bool success = false;
-		void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
-
-		/* TODO: Map the stack on stack_bottom and claim the page immediately.
-		 * TODO: If success, set the rsp accordingly.
-		 * TODO: You should mark the page is stack. */
-		/* TODO: Your code goes here */
-
-		return success;
-	}
+	return success;
+}
 #endif /* VM */
