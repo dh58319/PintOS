@@ -34,7 +34,7 @@
 static const int EXPECTED_DEPTH_TO_PASS = 10;
 static const int EXPECTED_REPETITIONS = 10;
 
-const char *test_name = "multi-oom";
+//const char *test_name = "multi-oom";
 
 int make_children (void);
 
@@ -45,7 +45,7 @@ static void
 consume_some_resources (void)
 {
   int fd, fdmax = 126;
-
+  test_name = "multi-oom";
   /* Open as many files as we can, up to fdmax.
 	 Depending on how file descriptors are allocated inside
 	 the kernel, open() may fail if the kernel is low on memory.

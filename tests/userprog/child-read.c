@@ -13,8 +13,8 @@
 #include "tests/userprog/boundary.h"
 #include "tests/userprog/sample.inc"
 #include "tests/lib.h"
-
-const char *test_name = "child-read";
+//
+//const char *test_name = "child-read";
 
 int
 main (int argc UNUSED, char *argv[]) 
@@ -22,6 +22,7 @@ main (int argc UNUSED, char *argv[])
   int handle1, handle2;
   int byte_cnt;
   char *buffer;
+  test_name = "child-read";
   msg ("begin");
  
   if (!isdigit (*argv[1]))
